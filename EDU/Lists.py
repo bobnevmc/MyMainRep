@@ -1,3 +1,5 @@
+from dns.entropy import between
+
 A = [1,2,3 , 4 ,5]
 
 B = [6,7]
@@ -21,3 +23,7 @@ print(C)
 #Присваивание значения
 C[2:3] = ['Вставка']
 print(C)
+
+#формирование списков через цицла и условия
+S = [5 if x > 10 else x for x in range(20) if not x % 2 == 1]
+print(S)
