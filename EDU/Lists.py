@@ -27,3 +27,7 @@ print(C)
 #формирование списков через цицла и условия
 S = [5 if x > 10 else x for x in range(20) if not x % 2 == 1]
 print(S)
+
+#создание пустого списка
+res = [['' for i in range(5)] for j in range(5)]
+print(res)
