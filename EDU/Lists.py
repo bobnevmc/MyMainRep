@@ -31,3 +31,10 @@ print(S)
 #создание пустого списка
 res = [['' for i in range(5)] for j in range(5)]
 print(res)
+
+#Удаление из списка
+lst = [1, 2, 3, 2, 4, 5]
+for val in [2, 4]:
+    while val in lst:
+        lst.remove(val)
+# Результат: [1, 3, 5]
