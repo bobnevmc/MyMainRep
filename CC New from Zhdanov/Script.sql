@@ -1,4 +1,15 @@
-with base as (select s.PLAYER_ID,
+with pre_square_talk_campaign AS (
+    SELECT
+        campaign_id,
+        list_id,
+        name AS campaign_name
+    FROM BI_SYSTEM_PROD.stg_plumber.square_talk_campaign
+    QUALIFY 1 = ROW_NUMBER() OVER (
+            PARTITION BY campaign_id, list_id
+            ORDER BY created_at DESC
+        )
+),
+    base as (select s.PLAYER_ID,
                      s.BRAND_NAME,
                      s.BRAND_NAME || ':' || s.PLAYER_ID uid_in_casino,
                      pl.COUNTRY_ALIAS,
@@ -13,21 +24,24 @@ with base as (select s.PLAYER_ID,
               from bi_system_prod.data_mart.leads_segments_dm s
                        left join BI_SYSTEM_PROD.DATA_MODEL.PLAYER_DIM pl
                                  ON s.BRAND_NAME = pl.BRAND_NAME and s.PLAYER_ID = pl.PLAYER_ID
-              where 1=1),
-     CALLS_STAT as (SELECT talk_calls_history.uid_in_casino                 AS uid_in_casino,
-                           count(distinct talk_calls_history.uid_in_casino) AS player_call_c,
-                           count(distinct case
-                                              when talk_calls_history.agent_name is null
-                                                  then talk_calls_history.uid_in_casino
-                                              else null end)                as player_call_c_pickup,
-                           count(distinct
-                                 IFF((status_label = 'Sale' or LEAD_STATUS_LABEL = 'Sale')
-                                         and AGENT_NAME is not null, uid_in_casino,
-                                     null))                                 as player_call_c_sale //длительность 10 сек убрали, согласовано с КЦ
+),
+     CALLS_STAT as (SELECT talk_calls_history.uid_in_casino                         AS uid_in_casino,
+                           1 AS player_call_c,
+                           max(case when talk_calls_history.agent_name is  not null
+                                then 1
+                                else 0 end)                                          as player_call_c_pickup,
+                           max(case when (status_label = 'Sale' or LEAD_STATUS_LABEL = 'Sale')
+                                        and AGENT_NAME is not null then 1 else 0 end)
+                                                                                    as player_call_c_sale //длительность 10 сек убрали, согласовано с КЦ
                     FROM BI_SYSTEM_PROD.stg_plumber.square_talk_calls_history talk_calls_history
-                             inner join base using (uid_in_casino)
-                    where talk_calls_history.called_at between base.START_AT and base.END_at
-                    group by talk_calls_history.uid_in_casino),
+                    left join pre_square_talk_campaign
+                        on pre_square_talk_campaign.CAMPAIGN_ID = talk_calls_history.CAMPAIGN_ID
+                        and pre_square_talk_campaign.LIST_ID = talk_calls_history.LIST_ID
+                    inner join base on base.uid_in_casino = talk_calls_history.uid_in_casino
+                   and (talk_calls_history.called_at between base.START_AT and base.END_at)
+                    and pre_square_talk_campaign.campaign_name ilike '%cc_medium%' -- тут в будущем надо проверять чтобы и кампании и сегменты совпадали по названию
+                group by 1,2
+        ),
      pre_new_lead AS (SELECT distinct talk_lead.UID_IN_CASINO,
                                       1 as IS_ADDED
                       FROM BI_SYSTEM_PROD.stg_plumber.square_talk_lead talk_lead
@@ -79,6 +93,4 @@ with base as (select s.PLAYER_ID,
                          left join CALLS_STAT using (uid_in_casino)
                          left join bonuses ON bonuses.BRAND = base.BRAND_NAME and bonuses.PLAYER_ID = base.PLAYER_ID
                          left join deposit_bonus ON deposit_bonus.PLAYER_ID = base.PLAYER_ID)
-select *
-from result
-;
+select * from result
